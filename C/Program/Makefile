@@ -1,53 +1,74 @@
 # Simple options
 BINARY_NAME	=	my_program
+
 SRC_FILES	=	src/main.c
 
-OBJ_FILES	=	$(SRC_FILES:.c=.o)
+LIBS	=
+INCLUDES_FOLDERS	=
 
-LIBS	=	jpeg png
-INCLUDES_FOLDERS	=	./src/includes/
+OTHER_PROJECTS_TO_BUILD	=
 
 # Advanced options
-WARNING_FLAGS	=	-Wall -W -Werror
+OBJ_RELEASE_DESTINATION	=	./obj/release/
+OBJ_DEBUG_DESTINATION	=	./obj/dev/
 
-DEBUG_FLAGS	=	$(WARNING_FLAGS) $(addprefix -I,$(INCLUDES_FOLDERS)) $(addprefix -l,$(LIBS))
-RELEASE_FLAGS	=	-O3 $(addprefix -I,$(INCLUDES_FOLDERS)) $(addprefix -l,$(LIBS))
+OBJ_RELEASE	=	$(SRC_FILES:%.c=$(OBJ_RELEASE_DESTINATION)%.o)
+OBJ_DEBUG	=	$(SRC_FILES:%.c=$(OBJ_DEBUG_DESTINATION)%.o)
 
-OBJ_DESTINATION	=	./obj/
+WARNING_FLAGS	=	-Wall -Wextra
+OPTIMISATION_FLAG	=	-O3
+MEMORY_SANITIZER_FLAGS	=	-fsanitize=address -fsanitize=undefined
+
+COMPILATION_RELEASE_FLAGS	=	$(addprefix -I,$(INCLUDES_FOLDERS)) $(addprefix -l,$(LIBS)) $(OPTIMISATION_FLAG) $(WARNING_FLAGS) -DNDEBUG -march=native -flto
+COMPILATION_DEBUG_FLAGS	=	$(addprefix -I,$(INCLUDES_FOLDERS)) $(addprefix -l,$(LIBS)) -g $(WARNING_FLAGS) $(MEMORY_SANITIZER_FLAGS) -fno-omit-frame-pointer
+
+LINKING_RELEASE_FLAGS	=	$(addprefix -I,$(INCLUDES_FOLDERS)) $(addprefix -l,$(LIBS)) $(OPTIMISATION_FLAG) -flto -s
+LINKING_DEBUG_FLAGS	=	$(addprefix -I,$(INCLUDES_FOLDERS)) $(addprefix -l,$(LIBS)) -g $(MEMORY_SANITIZER_FLAGS)
+
+FINAL_BINARY_DESTINATION	=	./
 
 COMPILER	=	gcc
-COMPILER_OBJECT_FLAG	=	-c
-COMPILER_RES_FLAG	=	-o
 LINKER	=	$(COMPILER)
 
-OBJ_DEBUG	=	$(OBJ_FILES)
+FINAL_BINARY_PATH	=	$(addprefix $(FINAL_BINARY_DESTINATION),$(BINARY_NAME))
 
+# Commands
+RELEASE_COMPILATION	=	$(COMPILER) -c $< -o $@ $(COMPILATION_RELEASE_FLAGS)
+DEBUG_COMPILATION	=	$(COMPILER) -c $< -o $@ $(COMPILATION_DEBUG_FLAGS)
+
+RELEASE_LINKING	=	$(LINKER) -o $(FINAL_BINARY_PATH) $(OBJ_RELEASE) $(LINKING_RELEASE_FLAGS)
+DEBUG_LINKING	=	$(LINKER) -o $(FINAL_BINARY_PATH) $(OBJ_DEBUG) $(LINKING_DEBUG_FLAGS)
 
 # Rules
 all:
-	make $(BINARY_NAME)
-	$(LINKER) -o $(BINARY_NAME) $(OBJ_FILES)
+	make $(FINAL_BINARY_PATH)
+
+$(FINAL_BINARY_PATH):
+	$(foreach PROJECT,$(OTHER_PROJECTS_TO_BUILD),make -C $(PROJECT))
+	make $(OBJ_RELEASE)
+	$(RELEASE_LINKING)
 
 dev:
+	$(foreach PROJECT,$(OTHER_PROJECTS_TO_BUILD),make -C $(PROJECT) dev)
 	make $(OBJ_DEBUG)
+	$(DEBUG_LINKING)
 
-$(BINARY_NAME):
-	make $(OBJ)
-	$(LINKER)
+$(OBJ_RELEASE) : $(OBJ_RELEASE_DESTINATION)%.o : %.c
+	@mkdir -p $(dir $@)
+	$(RELEASE_COMPILATION)
 
-$(OBJ_FILES) : %.o : %.c
-	$(COMPILER) -c $< -o $@ $(RELEASE_FLAGS)
-
-$(OBJ_DEBUG) : %.o : %.c
-	$(COMPILER) -c $< -o $@ $(DEBUG_FLAGS)
+$(OBJ_DEBUG) : $(OBJ_DEBUG_DESTINATION)%.o : %.c
+	@mkdir -p $(dir $@)
+	$(DEBUG_COMPILATION)
 
 clean:
-	rm -f $(OBJ_FILES)
+	rm -f $(OBJ_RELEASE)
+	rm -f $(OBJ_DEBUG)
 
 fclean:
 	make clean
-	rm -f $(BINARY_NAME)
+	rm -f $(FINAL_BINARY_PATH)
 
 re:
 	make fclean
-	make
+	make dev
